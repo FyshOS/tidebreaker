@@ -7,6 +7,10 @@ The game ends when your lives run out.
 
 ![TideBreaker](https://img.shields.io/badge/Fyne-v2.7-blue)
 
+## Screenshot
+
+![](img/screenshot.png)
+
 ## Play
 
 ```sh
