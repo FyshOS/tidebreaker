@@ -1,0 +1,9 @@
+[Details]
+Icon = "Icon.png"
+Name = "Tidebreaker"
+ID = "com.fyshos.tidebreaker"
+Version = "0.0.1"
+Build = 4
+
+[LinuxAndBSD]
+Categories = ["Game"]
