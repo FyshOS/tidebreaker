@@ -13,6 +13,10 @@ import (
 const (
 	sampleRate = 44100
 	channels   = 1
+
+	// deviceBufferSize caps how much audio the output device keeps queued ahead.
+	// Smaller means more immediate feedback - but large enough old hardware doesn't glitch.
+	deviceBufferSize = 30 * time.Millisecond
 )
 
 // soundPlayer renders short retro square-wave blips for game events. It owns a
@@ -38,6 +42,7 @@ func newSoundPlayer() *soundPlayer {
 		SampleRate:   sampleRate,
 		ChannelCount: channels,
 		Format:       oto.FormatSignedInt16LE,
+		BufferSize:   deviceBufferSize,
 	})
 	if err != nil {
 		return sp // disabled: no audio device

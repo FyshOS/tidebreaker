@@ -323,13 +323,11 @@ func (g *Game) Resize(w, h float32) {
 	g.ballY *= sy
 	g.ballVX *= sx
 	g.ballVY *= sy
-	r := g.ballR
-	g.ballR *= (sx + sy) / 2
-	if r != 0 {
-		s := g.ballR / r
-		g.speed *= s
-		g.baseSpeed *= s
-	}
+
+	// scale ball radius and speed to the actual size of our screen.
+	g.ballR *= float32(math.Sqrt(float64(sx * sy)))
+	g.speed *= sy
+	g.baseSpeed *= sy
 	for _, b := range g.bricks {
 		b.x *= sx
 		b.y *= sy
