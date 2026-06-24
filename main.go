@@ -10,6 +10,8 @@
 //	Space              launch the ball · pause/resume · play again
 //	P                  pause / resume
 //	R                  restart
+//
+// Play also pauses automatically whenever the app leaves the foreground.
 package main
 
 import (
@@ -35,8 +37,12 @@ func main() {
 	// Give the board keyboard focus so held arrow keys reach it.
 	w.Canvas().Focus(board)
 
-	startLoop(game, board)
+	a.Lifecycle().SetOnExitedForeground(func() {
+		game.Pause()
+		board.Refresh()
+	})
 
+	startLoop(game, board)
 	w.ShowAndRun()
 }
 

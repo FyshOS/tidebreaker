@@ -223,6 +223,14 @@ func (g *Game) TogglePause() {
 	}
 }
 
+// Pause freezes play if the ball is in motion. Unlike TogglePause it only ever
+// pauses, never resumes.
+func (g *Game) Pause() {
+	if g.state == StatePlaying {
+		g.state = StatePaused
+	}
+}
+
 // Restart begins a brand new game from the current board size.
 func (g *Game) Restart() {
 	g.startGame()

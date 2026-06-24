@@ -17,6 +17,7 @@ var (
 	colBall   = color.NRGBA{0xF8, 0xFA, 0xFC, 0xFF} // foam white
 	colText   = color.NRGBA{0xE2, 0xE8, 0xF0, 0xFF}
 	colDim    = color.NRGBA{0x94, 0xA3, 0xB8, 0xFF}
+	colOver   = color.NRGBA{0x0B, 0x1B, 0x2B, 0xC8} // translucent veil for pause/over screens
 )
 
 // Board is the interactive play surface: a focusable, hoverable custom widget
@@ -37,6 +38,8 @@ func (b *Board) CreateRenderer() fyne.WidgetRenderer {
 	r := &boardRenderer{board: b, game: b.game}
 
 	r.bg = canvas.NewRectangle(colWater)
+	r.over = canvas.NewRectangle(colOver)
+	r.over.Hide()
 	r.paddle = canvas.NewRectangle(colPaddle)
 	r.paddle.CornerRadius = 6
 	r.ball = canvas.NewCircle(colBall)
@@ -122,6 +125,7 @@ type boardRenderer struct {
 	game  *Game
 
 	bg       *canvas.Rectangle
+	over     *canvas.Rectangle
 	paddle   *canvas.Rectangle
 	ball     *canvas.Circle
 	bricks   []*canvas.Rectangle
@@ -134,6 +138,7 @@ type boardRenderer struct {
 func (r *boardRenderer) Layout(size fyne.Size) {
 	r.game.Resize(size.Width, size.Height)
 	r.bg.Resize(size)
+	r.over.Resize(size)
 	r.syncBricks()
 }
 
@@ -160,7 +165,7 @@ func (r *boardRenderer) Objects() []fyne.CanvasObject {
 	for _, br := range r.bricks {
 		objs = append(objs, br)
 	}
-	objs = append(objs, r.paddle, r.ball, r.score, r.lives, r.title, r.subtitle)
+	objs = append(objs, r.paddle, r.ball, r.score, r.lives, r.over, r.title, r.subtitle)
 	return objs
 }
 
@@ -207,6 +212,8 @@ func (r *boardRenderer) Refresh() {
 func (r *boardRenderer) refreshBanner() {
 	g := r.game
 	var title, sub string
+	// The pause screen veils the frozen board so it reads as a distinct overlay.
+	r.over.Hide()
 	switch g.state {
 	case StateReady:
 		if g.score == 0 && g.level == 1 {
@@ -216,6 +223,7 @@ func (r *boardRenderer) refreshBanner() {
 		}
 		sub = "Click or press Space to launch"
 	case StatePaused:
+		r.over.Show()
 		title = "Paused"
 		sub = "Press Space to resume"
 	case StateGameOver:
