@@ -14,14 +14,18 @@ const (
 	StatePlaying                   // ball in motion
 	StatePaused                    // frozen by the player
 	StateGameOver                  // out of lives
+	StateWon                       // every level cleared
 )
 
 const (
 	startLives = 3
 	brickCols  = 10
-	brickRows  = 6
+	brickRows  = 6           // rows in the opening (classic full-grid) level
 	maxBounce  = math.Pi / 3 // 60° — steepest deflection off the paddle edge
 )
+
+// maxLevel is the number of hand-designed boards; clearing the last one wins.
+var maxLevel = len(levels)
 
 // Sound names an audible game event. The model only emits these through a
 // callback, so it stays free of any audio dependency (and the tests stay silent).
@@ -34,14 +38,20 @@ const (
 	SoundBrick
 	SoundLoseLife
 	SoundGameOver
+	SoundLevelUp
+	SoundWin
 )
 
-// Brick is a single destructible block.
+// Brick is a single block. Most bricks shatter in one hit; tougher bricks take
+// several, and unbreakable bricks only ever deflect the ball.
 type Brick struct {
-	x, y, w, h float32
-	col        color.Color
-	points     int
-	alive      bool
+	x, y, w, h  float32
+	col         color.Color
+	points      int
+	hits        int  // blows still needed to destroy it (ignored when unbreakable)
+	maxHits     int  // hits when fresh, used to pick the damage colour
+	unbreakable bool // a fixed wall that never breaks and never blocks level clear
+	alive       bool
 }
 
 // Game holds all mutable play state. Every field is touched only from the UI
@@ -89,6 +99,171 @@ var rowColors = []color.Color{
 
 // rowPoints rewards the harder-to-reach upper rows more generously.
 var rowPoints = []int{60, 50, 40, 30, 20, 10}
+
+// Special brick colours. Tougher bricks pale as they take damage so the player
+// can read how close they are to breaking.
+var (
+	colUnbreak = color.NRGBA{0x47, 0x55, 0x69, 0xFF} // slate — a permanent wall
+	silverCols = []color.Color{                      // index by remaining hits - 1
+		color.NRGBA{0x94, 0xA3, 0xB8, 0xFF}, // 1 left — cracked
+		color.NRGBA{0xCB, 0xD5, 0xE1, 0xFF}, // 2 left — bright silver
+	}
+	goldCols = []color.Color{
+		color.NRGBA{0xB9, 0x8A, 0x24, 0xFF}, // 1 left
+		color.NRGBA{0xE3, 0xB3, 0x3A, 0xFF}, // 2 left
+		color.NRGBA{0xFD, 0xE0, 0x68, 0xFF}, // 3 left — fresh gold
+	}
+)
+
+// Special brick scores. Tougher bricks are worth more.
+const (
+	silverPoints = 50
+	goldPoints   = 90
+)
+
+// levels holds the 10 hand-designed boards, easiest first. Each string is one
+// row of up to brickCols cells:
+//
+//	. or space  empty
+//	o           standard brick (one hit, ocean-gradient colour by row)
+//	2           silver brick   (two hits)
+//	3           gold brick     (three hits)
+//	#           unbreakable wall (deflects only; never blocks level clear)
+//
+// Patterns avoid sealing breakable bricks behind walls, so every board is
+// always clearable.
+var levels = [][]string{
+	// 1 — Classic warm-up: a solid wall of single-hit bricks.
+	{
+		"oooooooooo",
+		"oooooooooo",
+		"oooooooooo",
+		"oooooooooo",
+		"oooooooooo",
+		"oooooooooo",
+	},
+	// 2 — Denser wall, two rows taller.
+	{
+		"oooooooooo",
+		"oooooooooo",
+		"oooooooooo",
+		"oooooooooo",
+		"oooooooooo",
+		"oooooooooo",
+		"oooooooooo",
+		"oooooooooo",
+	},
+	// 3 — Checkerboard: gaps let the ball weave through.
+	{
+		"o.o.o.o.o.",
+		".o.o.o.o.o",
+		"o.o.o.o.o.",
+		".o.o.o.o.o",
+		"o.o.o.o.o.",
+		".o.o.o.o.o",
+	},
+	// 4 — Pyramid with a silver-tipped peak.
+	{
+		"....22....",
+		"...o22o...",
+		"..oooooo..",
+		".oooooooo.",
+		"oooooooooo",
+	},
+	// 5 — Vertical pillars guarding a silver core.
+	{
+		"oo..oo..oo",
+		"oo..22..oo",
+		"oo..22..oo",
+		"oo..22..oo",
+		"oo..oo..oo",
+		"oo..oo..oo",
+	},
+	// 6 — Diamond ringed with silver.
+	{
+		"....oo....",
+		"...o22o...",
+		"..oo22oo..",
+		".oo2oo2oo.",
+		"..oo22oo..",
+		"...o22o...",
+		"....oo....",
+	},
+	// 7 — Descending stripes, the leading edge reinforced.
+	{
+		"222.......",
+		".ooo......",
+		"..222.....",
+		"...ooo....",
+		"....222...",
+		".....ooo..",
+		"......222.",
+		".......ooo",
+	},
+	// 8 — Fortress: unbreakable bunkers embedded in the wall.
+	{
+		"oooooooooo",
+		"o##oooo##o",
+		"oooooooooo",
+		"o##oooo##o",
+		"oooooooooo",
+		"oooo22oooo",
+	},
+	// 9 — Tough wall: gold and silver up top, easing toward the paddle.
+	{
+		"3333333333",
+		"2222222222",
+		"3333333333",
+		"2222222222",
+		"oooooooooo",
+		"oooooooooo",
+	},
+	// 10 — The gauntlet: a gold/silver lattice over a guarded base.
+	{
+		"3232323232",
+		"2323232323",
+		"3232323232",
+		"2323232323",
+		"oooooooooo",
+		"#oooooooo#",
+	},
+}
+
+// multiHitColor returns the colour for a tough brick with `remaining` hits left.
+func multiHitColor(maxHits, remaining int) color.Color {
+	var pal []color.Color
+	switch maxHits {
+	case 2:
+		pal = silverCols
+	case 3:
+		pal = goldCols
+	default:
+		return colUnbreak
+	}
+	i := clampInt(remaining-1, 0, len(pal)-1)
+	return pal[i]
+}
+
+// makeBrick builds a brick from a pattern cell. row picks the gradient colour
+// and point value for standard bricks.
+func makeBrick(ch byte, row int) *Brick {
+	switch ch {
+	case '2':
+		return &Brick{col: multiHitColor(2, 2), points: silverPoints, hits: 2, maxHits: 2, alive: true}
+	case '3':
+		return &Brick{col: multiHitColor(3, 3), points: goldPoints, hits: 3, maxHits: 3, alive: true}
+	case '#':
+		return &Brick{col: colUnbreak, unbreakable: true, alive: true}
+	default: // 'o'
+		return &Brick{
+			col:     rowColors[row%len(rowColors)],
+			points:  rowPoints[row%len(rowPoints)],
+			hits:    1,
+			maxHits: 1,
+			alive:   true,
+		}
+	}
+}
 
 func NewGame() *Game {
 	return &Game{
@@ -170,18 +345,22 @@ func (g *Game) setupLevel() {
 	bw := (areaW - gap*float32(brickCols-1)) / brickCols
 	bh := g.h * 0.028
 
+	// Levels are 1-indexed; wrap defensively so an out-of-range level can never
+	// panic (play stops at StateWon before this happens in normal flow).
+	pattern := levels[(g.level-1)%len(levels)]
+
 	g.bricks = g.bricks[:0]
-	for row := 0; row < brickRows; row++ {
-		for col := 0; col < brickCols; col++ {
-			g.bricks = append(g.bricks, &Brick{
-				x:      side + float32(col)*(bw+gap),
-				y:      top + float32(row)*(bh+gap),
-				w:      bw,
-				h:      bh,
-				col:    rowColors[row%len(rowColors)],
-				points: rowPoints[row%len(rowPoints)],
-				alive:  true,
-			})
+	for row, line := range pattern {
+		for col := 0; col < brickCols && col < len(line); col++ {
+			ch := line[col]
+			if ch == '.' || ch == ' ' {
+				continue
+			}
+			b := makeBrick(ch, row)
+			b.x = side + float32(col)*(bw+gap)
+			b.y = top + float32(row)*(bh+gap)
+			b.w, b.h = bw, bh
+			g.bricks = append(g.bricks, b)
 		}
 	}
 	g.resetBall()
@@ -238,7 +417,7 @@ func (g *Game) Restart() {
 
 // SetPaddleCenter aims the paddle so its centre sits under x (mouse control).
 func (g *Game) SetPaddleCenter(x float32) {
-	if g.state == StateGameOver || g.state == StatePaused {
+	if g.state == StateGameOver || g.state == StatePaused || g.state == StateWon {
 		return
 	}
 	g.paddleX = clamp(x-g.paddleW/2, 0, g.w-g.paddleW)
@@ -299,10 +478,21 @@ func (g *Game) moveBall(dt float32) {
 	g.paddleCollision()
 	g.brickCollisions()
 
-	if g.aliveBricks() == 0 {
-		g.level++
-		g.setupLevel()
+	if g.breakableAlive() == 0 {
+		g.advanceLevel()
 	}
+}
+
+// advanceLevel loads the next board, or declares victory after the final one.
+func (g *Game) advanceLevel() {
+	if g.level >= maxLevel {
+		g.state = StateWon
+		g.play(SoundWin)
+		return
+	}
+	g.level++
+	g.setupLevel()
+	g.play(SoundLevelUp)
 }
 
 // paddleCollision bounces the ball off the paddle, steering it by where it lands.
@@ -355,6 +545,20 @@ func (g *Game) brickCollisions() {
 			g.ballY, g.ballVY = ey1, abs(g.ballVY)
 		}
 
+		// Unbreakable walls only deflect — they never break or score.
+		if b.unbreakable {
+			g.play(SoundWall)
+			return
+		}
+
+		// Tough bricks survive a few blows, paling as they crack.
+		b.hits--
+		if b.hits > 0 {
+			b.col = multiHitColor(b.maxHits, b.hits)
+			g.play(SoundWall)
+			return
+		}
+
 		b.alive = false
 		g.score += b.points
 		g.play(SoundBrick)
@@ -398,7 +602,29 @@ func (g *Game) aliveBricks() int {
 	return n
 }
 
+// breakableAlive counts the bricks still standing that the player can destroy;
+// unbreakable walls are ignored so they never stall level completion.
+func (g *Game) breakableAlive() int {
+	n := 0
+	for _, b := range g.bricks {
+		if b.alive && !b.unbreakable {
+			n++
+		}
+	}
+	return n
+}
+
 // --- small float helpers ---
+
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
 
 func clamp(v, lo, hi float32) float32 {
 	if v < lo {

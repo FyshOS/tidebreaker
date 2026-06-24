@@ -50,6 +50,10 @@ func (b *Board) CreateRenderer() fyne.WidgetRenderer {
 	r.lives.TextStyle.Bold = true
 	r.lives.Alignment = fyne.TextAlignTrailing
 
+	r.levelText = canvas.NewText("", colDim)
+	r.levelText.TextStyle.Bold = true
+	r.levelText.Alignment = fyne.TextAlignCenter
+
 	r.title = canvas.NewText("", colText)
 	r.title.TextStyle.Bold = true
 	r.title.Alignment = fyne.TextAlignCenter
@@ -71,7 +75,7 @@ func (b *Board) MouseDown(*desktop.MouseEvent) {
 	switch b.game.state {
 	case StateReady:
 		b.game.Launch()
-	case StateGameOver:
+	case StateGameOver, StateWon:
 		b.game.Restart()
 	}
 }
@@ -91,7 +95,7 @@ func (b *Board) TypedKey(e *fyne.KeyEvent) {
 			b.game.Launch()
 		case StatePlaying, StatePaused:
 			b.game.TogglePause()
-		case StateGameOver:
+		case StateGameOver, StateWon:
 			b.game.Restart()
 		}
 	case fyne.KeyP:
@@ -124,15 +128,16 @@ type boardRenderer struct {
 	board *Board
 	game  *Game
 
-	bg       *canvas.Rectangle
-	over     *canvas.Rectangle
-	paddle   *canvas.Rectangle
-	ball     *canvas.Circle
-	bricks   []*canvas.Rectangle
-	score    *canvas.Text
-	lives    *canvas.Text
-	title    *canvas.Text
-	subtitle *canvas.Text
+	bg        *canvas.Rectangle
+	over      *canvas.Rectangle
+	paddle    *canvas.Rectangle
+	ball      *canvas.Circle
+	bricks    []*canvas.Rectangle
+	score     *canvas.Text
+	lives     *canvas.Text
+	levelText *canvas.Text
+	title     *canvas.Text
+	subtitle  *canvas.Text
 }
 
 func (r *boardRenderer) Layout(size fyne.Size) {
@@ -165,7 +170,7 @@ func (r *boardRenderer) Objects() []fyne.CanvasObject {
 	for _, br := range r.bricks {
 		objs = append(objs, br)
 	}
-	objs = append(objs, r.paddle, r.ball, r.score, r.lives, r.over, r.title, r.subtitle)
+	objs = append(objs, r.paddle, r.ball, r.score, r.lives, r.levelText, r.over, r.title, r.subtitle)
 	return objs
 }
 
@@ -203,6 +208,11 @@ func (r *boardRenderer) Refresh() {
 	r.lives.Resize(fyne.NewSize(g.w*0.92, hud*1.4))
 	r.lives.Move(fyne.NewPos(0, g.h*0.04))
 
+	r.levelText.TextSize = hud
+	r.levelText.Text = fmt.Sprintf("LEVEL %d", g.level)
+	r.levelText.Resize(fyne.NewSize(g.w, hud*1.4))
+	r.levelText.Move(fyne.NewPos(0, g.h*0.04))
+
 	r.refreshBanner()
 
 	canvas.Refresh(r.bg)
@@ -212,7 +222,7 @@ func (r *boardRenderer) Refresh() {
 func (r *boardRenderer) refreshBanner() {
 	g := r.game
 	var title, sub string
-	// The pause screen veils the frozen board so it reads as a distinct overlay.
+	// Paused / game-over / win screens veil the board so they read as overlays.
 	r.over.Hide()
 	switch g.state {
 	case StateReady:
@@ -227,8 +237,13 @@ func (r *boardRenderer) refreshBanner() {
 		title = "Paused"
 		sub = "Press Space to resume"
 	case StateGameOver:
+		r.over.Show()
 		title = "Game Over"
 		sub = fmt.Sprintf("Score %d  ·  Space or click to play again", g.score)
+	case StateWon:
+		r.over.Show()
+		title = "You Win!"
+		sub = fmt.Sprintf("All %d levels cleared  ·  Score %d  ·  Space to play again", maxLevel, g.score)
 	default:
 		r.title.Text, r.subtitle.Text = "", ""
 		r.title.Hide()

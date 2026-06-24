@@ -112,6 +112,19 @@ func buildSounds() map[Sound][]byte {
 			segment{196, 196, 160 * time.Millisecond, 0.40},
 			segment{131, 131, 320 * time.Millisecond, 0.40},
 		),
+		// A bright rising triad as a level is cleared.
+		SoundLevelUp: render(
+			segment{523, 523, 90 * time.Millisecond, 0.35},
+			segment{659, 659, 90 * time.Millisecond, 0.35},
+			segment{784, 784, 140 * time.Millisecond, 0.35},
+		),
+		// A triumphant ascending fanfare for winning the whole game.
+		SoundWin: render(
+			segment{523, 523, 130 * time.Millisecond, 0.40},
+			segment{659, 659, 130 * time.Millisecond, 0.40},
+			segment{784, 784, 130 * time.Millisecond, 0.40},
+			segment{1047, 1047, 360 * time.Millisecond, 0.40},
+		),
 	}
 }
 
