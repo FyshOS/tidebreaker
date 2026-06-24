@@ -30,8 +30,8 @@ go build -o tidebreaker .
 
 | Input | Action |
 | --- | --- |
-| Mouse move / `←` `→` / `A` `D` | Move the paddle |
-| `Space` | Launch the ball · pause / resume · play again |
+| Mouse move / finger drag / `←` `→` / `A` `D` | Move the paddle |
+| Tap / click / `Space` | Launch the ball · pause / resume · play again |
 | `P` | Pause / resume |
 | `R` | Restart |
 

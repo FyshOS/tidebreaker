@@ -1,15 +1,15 @@
 // TideBreaker — a nostalgic single-player breakout clone built with Fyne.
 //
-// Steer the paddle with the mouse or the arrow keys (A/D also work), keep the
-// ball in play, and break as many ocean-blue blocks as you can. Clearing the
-// board advances you to a faster level; the game ends when your lives run out.
+// Steer the paddle with the mouse, a finger, or the arrow keys (A/D also work),
+// keep the ball in play, and break as many ocean-blue blocks as you can. Clearing
+// the board advances you to a faster level; the game ends when your lives run out.
 //
 // Controls:
 //
-//	Mouse / ← → / A D  move the paddle
-//	Space              launch the ball · pause/resume · play again
-//	P                  pause / resume
-//	R                  restart
+//	Mouse / finger / ← → / A D  move the paddle
+//	Tap / click / Space         launch the ball · pause/resume · play again
+//	P                           pause / resume
+//	R                           restart
 //
 // Play also pauses automatically whenever the app leaves the foreground.
 package main

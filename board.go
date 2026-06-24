@@ -74,23 +74,41 @@ func (b *Board) MoveDynamic() {
 	}
 }
 
-// --- input: mouse ---
+// --- input: pointer (mouse hover, click, and touch) ---
 
 func (b *Board) MouseIn(*desktop.MouseEvent) {}
 func (b *Board) MouseOut()                   {}
+
+// MouseMoved steers the paddle as the mouse hovers across the board (desktop).
 func (b *Board) MouseMoved(e *desktop.MouseEvent) {
 	b.game.SetPaddleCenter(e.Position.X)
 }
 
-func (b *Board) MouseDown(*desktop.MouseEvent) {
+// Tapped runs the same action as the Space key.
+func (b *Board) Tapped(*fyne.PointEvent) {
+	b.activate()
+}
+
+// Dragged steers the paddle to follow a finger (or a dragged mouse) across the
+// board to move paddle.
+func (b *Board) Dragged(e *fyne.DragEvent) {
+	b.game.SetPaddleCenter(e.Position.X)
+}
+
+func (b *Board) DragEnd() {}
+
+// activate runs the primary action: launch a parked ball, toggle pause during
+// play, or start a fresh game once it's over.
+func (b *Board) activate() {
 	switch b.game.state {
 	case StateReady:
 		b.game.Launch()
+	case StatePlaying, StatePaused:
+		b.game.TogglePause()
 	case StateGameOver, StateWon:
 		b.game.Restart()
 	}
 }
-func (b *Board) MouseUp(*desktop.MouseEvent) {}
 
 // --- input: keyboard ---
 
@@ -101,14 +119,7 @@ func (b *Board) TypedRune(rune) {}
 func (b *Board) TypedKey(e *fyne.KeyEvent) {
 	switch e.Name {
 	case fyne.KeySpace:
-		switch b.game.state {
-		case StateReady:
-			b.game.Launch()
-		case StatePlaying, StatePaused:
-			b.game.TogglePause()
-		case StateGameOver, StateWon:
-			b.game.Restart()
-		}
+		b.activate()
 	case fyne.KeyP:
 		b.game.TogglePause()
 	case fyne.KeyR:
