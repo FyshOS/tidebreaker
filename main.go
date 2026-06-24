@@ -26,7 +26,9 @@ const targetFPS = 60
 
 func main() {
 	a := app.New()
+	a.Settings().SetTheme(newGameTheme())
 	w := a.NewWindow("TideBreaker")
+	w.SetPadded(false)
 
 	game := NewGame()
 	game.onSound = newSoundPlayer().Play
