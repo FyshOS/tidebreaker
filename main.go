@@ -61,8 +61,15 @@ func startLoop(game *Game, board *Board) {
 				dt = 0.05
 			}
 			fyne.Do(func() {
-				game.Tick(dt)
-				board.Refresh()
+				// Do the least work the frame needs: nothing when idle, a cheap
+				// ball/paddle reposition while the ball flies, and a full redraw
+				// only when something structural (bricks, score, banner) changed.
+				switch game.Tick(dt) {
+				case RenderMove:
+					board.MoveDynamic()
+				case RenderFull:
+					board.Refresh()
+				}
 			})
 		}
 	}()

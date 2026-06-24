@@ -77,7 +77,29 @@ type Game struct {
 	level int
 	state GameState
 
+	// render records how much redrawing the next loop iteration needs. The loop
+	// does nothing on RenderNone (idle game), only repositions the ball/paddle on
+	// RenderMove (the common case — the ball flying), and re-runs the full
+	// renderer on RenderFull (bricks, score, banner — anything structural).
+	render Render
+
 	onSound func(Sound) // optional sink for sound events; nil = silent
+}
+
+// Render is how much work a frame needs: none, a cheap reposition, or a full redraw.
+type Render int
+
+const (
+	RenderNone Render = iota // nothing changed; skip the frame entirely
+	RenderMove               // only the ball/paddle moved; just reposition them
+	RenderFull               // structural change; re-run the whole renderer
+)
+
+// needRender escalates the pending work for this frame to at least level.
+func (g *Game) needRender(level Render) {
+	if level > g.render {
+		g.render = level
+	}
 }
 
 // play emits a sound event if a sink is wired up.
@@ -267,11 +289,12 @@ func makeBrick(ch byte, row int) *Brick {
 
 func NewGame() *Game {
 	return &Game{
-		w:     640,
-		h:     800,
-		lives: startLives,
-		level: 1,
-		state: StateReady,
+		w:      640,
+		h:      800,
+		lives:  startLives,
+		level:  1,
+		state:  StateReady,
+		render: RenderFull, // force the opening frame to draw
 	}
 }
 
@@ -281,6 +304,7 @@ func (g *Game) Resize(w, h float32) {
 	if w <= 0 || h <= 0 {
 		return
 	}
+	g.needRender(RenderFull) // geometry changed: everything must be repositioned
 	if !g.initialized {
 		g.w, g.h = w, h
 		g.initialized = true
@@ -371,6 +395,7 @@ func (g *Game) resetBall() {
 	g.speed = g.baseSpeed
 	g.state = StateReady
 	g.stickBall()
+	g.needRender(RenderFull)
 }
 
 // stickBall glues the ball to the centre-top of the paddle (used while Ready).
@@ -389,6 +414,7 @@ func (g *Game) Launch() {
 	g.ballVX = g.speed * float32(math.Sin(angle))
 	g.ballVY = -g.speed * float32(math.Cos(angle))
 	g.state = StatePlaying
+	g.needRender(RenderFull)
 	g.play(SoundLaunch)
 }
 
@@ -397,8 +423,10 @@ func (g *Game) TogglePause() {
 	switch g.state {
 	case StatePlaying:
 		g.state = StatePaused
+		g.needRender(RenderFull)
 	case StatePaused:
 		g.state = StatePlaying
+		g.needRender(RenderFull)
 	}
 }
 
@@ -407,6 +435,7 @@ func (g *Game) TogglePause() {
 func (g *Game) Pause() {
 	if g.state == StatePlaying {
 		g.state = StatePaused
+		g.needRender(RenderFull)
 	}
 }
 
@@ -420,23 +449,35 @@ func (g *Game) SetPaddleCenter(x float32) {
 	if g.state == StateGameOver || g.state == StatePaused || g.state == StateWon {
 		return
 	}
-	g.paddleX = clamp(x-g.paddleW/2, 0, g.w-g.paddleW)
+	nx := clamp(x-g.paddleW/2, 0, g.w-g.paddleW)
+	if nx != g.paddleX {
+		g.paddleX = nx
+		g.needRender(RenderMove)
+	}
 }
 
-// Tick advances the game by dt seconds.
-func (g *Game) Tick(dt float32) {
+// Tick advances the game by dt seconds and reports how much redrawing the frame
+// needs. It returns RenderNone for an idle frame (nothing moving, no pending
+// input), RenderMove when only the ball/paddle shifted, and RenderFull after a
+// structural change, so the loop can do the least work possible.
+func (g *Game) Tick(dt float32) Render {
 	switch g.state {
 	case StatePlaying:
 		g.movePaddle(dt)
-		g.moveBall(dt)
+		g.moveBall(dt)           // collisions escalate to RenderFull as needed
+		g.needRender(RenderMove) // the ball is always in motion while playing
 	case StateReady:
-		g.movePaddle(dt)
-		g.stickBall()
+		g.movePaddle(dt) // escalates to RenderMove only if the paddle glides
+		g.stickBall()    // the parked ball just tracks the paddle
 	}
+	r := g.render
+	g.render = RenderNone
+	return r
 }
 
 // movePaddle applies held-key gliding and keeps the paddle on-board.
 func (g *Game) movePaddle(dt float32) {
+	prev := g.paddleX
 	if g.leftHeld {
 		g.paddleX -= g.paddleSpeed * dt
 	}
@@ -444,6 +485,9 @@ func (g *Game) movePaddle(dt float32) {
 		g.paddleX += g.paddleSpeed * dt
 	}
 	g.paddleX = clamp(g.paddleX, 0, g.w-g.paddleW)
+	if g.paddleX != prev {
+		g.needRender(RenderMove)
+	}
 }
 
 // moveBall integrates the ball and resolves wall, paddle and brick collisions.
@@ -487,6 +531,7 @@ func (g *Game) moveBall(dt float32) {
 func (g *Game) advanceLevel() {
 	if g.level >= maxLevel {
 		g.state = StateWon
+		g.needRender(RenderFull)
 		g.play(SoundWin)
 		return
 	}
@@ -555,12 +600,14 @@ func (g *Game) brickCollisions() {
 		b.hits--
 		if b.hits > 0 {
 			b.col = multiHitColor(b.maxHits, b.hits)
+			g.needRender(RenderFull) // the brick's colour changed
 			g.play(SoundWall)
 			return
 		}
 
 		b.alive = false
 		g.score += b.points
+		g.needRender(RenderFull) // a brick vanished and the score moved
 		g.play(SoundBrick)
 		// Each broken brick nudges the pace up a touch.
 		g.speed *= 1.004
@@ -585,11 +632,12 @@ func (g *Game) loseLife() {
 	if g.lives <= 0 {
 		g.lives = 0
 		g.state = StateGameOver
+		g.needRender(RenderFull) // show the game-over banner
 		g.play(SoundGameOver)
 		return
 	}
 	g.play(SoundLoseLife)
-	g.resetBall()
+	g.resetBall() // resets to Ready and marks RenderFull
 }
 
 func (g *Game) aliveBricks() int {

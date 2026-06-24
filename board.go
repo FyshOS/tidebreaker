@@ -24,7 +24,8 @@ var (
 // that renders the game and feeds player input into the model.
 type Board struct {
 	widget.BaseWidget
-	game *Game
+	game     *Game
+	renderer *boardRenderer // cached so the loop can reposition without a full Refresh
 }
 
 func NewBoard(g *Game) *Board {
@@ -60,7 +61,17 @@ func (b *Board) CreateRenderer() fyne.WidgetRenderer {
 	r.subtitle = canvas.NewText("", colDim)
 	r.subtitle.Alignment = fyne.TextAlignCenter
 
+	b.renderer = r
 	return r
+}
+
+// MoveDynamic repositions only the ball and paddle, the two objects that move
+// during normal play, without re-running the full renderer. It triggers a single
+// lightweight canvas repaint and skips all the HUD/brick/banner work.
+func (b *Board) MoveDynamic() {
+	if b.renderer != nil {
+		b.renderer.moveDynamic()
+	}
 }
 
 // --- input: mouse ---
@@ -216,6 +227,17 @@ func (r *boardRenderer) Refresh() {
 	r.refreshBanner()
 
 	canvas.Refresh(r.bg)
+}
+
+// moveDynamic repositions just the ball and paddle and asks the canvas to
+// recomposite. Their textures are unchanged (only position moved), so this is
+// far cheaper than Refresh, which reformats text and restyles every brick.
+func (r *boardRenderer) moveDynamic() {
+	g := r.game
+	r.paddle.Move(fyne.NewPos(g.paddleX, g.paddleY))
+	r.ball.Move(fyne.NewPos(g.ballX-g.ballR, g.ballY-g.ballR))
+	canvas.Refresh(r.paddle)
+	canvas.Refresh(r.ball)
 }
 
 // refreshBanner shows the centre-screen prompt appropriate to the game state.

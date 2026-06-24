@@ -233,3 +233,64 @@ func TestClearingFinalLevelWins(t *testing.T) {
 		t.Fatalf("state = %v, want StateWon after clearing the last level", g.state)
 	}
 }
+
+// drain consumes the RenderFull that setup/Resize leaves pending, so a test can
+// observe the render level of the very next frame in isolation.
+func drain(g *Game) { g.Tick(0.016) }
+
+func TestIdleFrameSkipsRender(t *testing.T) {
+	g := newTestGame()
+	drain(g)
+	// Ready, no keys held, no mouse: nothing moves, so nothing to draw.
+	if r := g.Tick(0.016); r != RenderNone {
+		t.Fatalf("idle Ready frame = %v, want RenderNone", r)
+	}
+}
+
+func TestPausedFrameSkipsRender(t *testing.T) {
+	g := newTestGame()
+	drain(g)
+	g.state = StatePaused
+	if r := g.Tick(0.016); r != RenderNone {
+		t.Fatalf("paused frame = %v, want RenderNone", r)
+	}
+}
+
+func TestBallInFlightNeedsMoveOnly(t *testing.T) {
+	g := newTestGame()
+	drain(g)
+	g.state = StatePlaying
+	// Park the ball in open space and drift it down a hair: no wall, paddle or
+	// brick contact this step, so only its position changes.
+	g.ballX, g.ballY = g.w/2, g.h/2
+	g.ballVX, g.ballVY = 0, 40
+	if r := g.Tick(0.016); r != RenderMove {
+		t.Fatalf("ball in flight = %v, want RenderMove", r)
+	}
+}
+
+func TestBrickBreakNeedsFullRender(t *testing.T) {
+	g := newTestGame()
+	drain(g)
+	g.state = StatePlaying
+	b := g.bricks[0]
+	g.ballX = b.x + b.w/2
+	g.ballY = b.y + b.h + g.ballR - 1
+	g.ballVX, g.ballVY = 0, -300
+	if r := g.Tick(0.0); r != RenderFull {
+		t.Fatalf("brick break = %v, want RenderFull", r)
+	}
+	if b.alive {
+		t.Fatalf("brick should have broken")
+	}
+}
+
+func TestPaddleGlideNeedsMoveOnly(t *testing.T) {
+	g := newTestGame()
+	drain(g)
+	// Ready state, holding right: the paddle (and parked ball) glide, nothing else.
+	g.rightHeld = true
+	if r := g.Tick(0.016); r != RenderMove {
+		t.Fatalf("paddle glide = %v, want RenderMove", r)
+	}
+}
